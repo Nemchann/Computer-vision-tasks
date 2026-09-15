@@ -8,6 +8,8 @@ original_image = None
 current_image = None
 
 # Общие функции
+
+# Отображение изображения на экране
 def display_image(image):
     display_image = image.copy()
     display_image.thumbnail((850, 850))
@@ -17,7 +19,7 @@ def display_image(image):
     image_label.config(image=tk_img)
     image_label.image = tk_img
 
-
+# Открыть изображение из проводника
 def open_image():
     global original_image, current_image, current_file_path
 
@@ -38,7 +40,7 @@ def open_image():
 
         display_image(current_image)
 
-
+# Сохранить изображение
 def save_current_image():
     if current_image is None:
         return
@@ -57,6 +59,7 @@ def save_current_image():
         save_image(file_path, current_image)
 
 
+# Отменить все действия
 def reset_image():
     global current_image
 
@@ -64,10 +67,14 @@ def reset_image():
         return
 
     current_image = original_image.copy()
+    brightness_scale.set(0)
+    saturation_scale.set(0)
+    contrast_scale.set(0)
     display_image(current_image)
 
 # Информация об изображении
 
+# Показать информацию об изображении
 def show_image_info():
     if original_image is None:
         return
@@ -84,6 +91,7 @@ def show_image_info():
 
     info_label.config(text=text)
 
+# Показать EXIF
 def show_exif_info():
     if original_image is None:
         return
@@ -101,14 +109,14 @@ def show_exif_info():
 
 
 # Функции редактирования изображения
-
+# Применить черно-белую градацию
 def make_grayscale():
     global current_image
 
     current_image = to_grayscale(current_image)
     display_image(current_image)
 
-
+# Изменить яркость
 def apply_brightness():
     global current_image
 
@@ -124,7 +132,7 @@ def apply_brightness():
 
     display_image(current_image)
 
-
+# Изменить контраст
 def apply_contrast():
     global current_image
 
@@ -140,7 +148,7 @@ def apply_contrast():
 
     display_image(current_image)
 
-
+# Изменить насыщенность
 def apply_saturation():
     global current_image
 
@@ -156,6 +164,7 @@ def apply_saturation():
 
     display_image(current_image)
 
+# Повернуть изображение на 90 градусов вправо
 def rotate_image():
     global current_image
 
@@ -177,6 +186,29 @@ def show_histogram():
     else:
         show_rgb_histogram(current_image)
 
+
+# Коррекции
+# Линейная коррекция
+def apply_linear_correction():
+    global current_image
+
+    if current_image is None:
+        return
+
+    current_image = linear_correction(current_image)
+    display_image(current_image)
+
+# Нелинейная коррекция
+def apply_nonlinear_correction():
+    global current_image
+
+    if current_image is None:
+        return
+
+    current_image = nonlinear_correction(current_image)
+    display_image(current_image)
+
+
 # Код отображения окна Tkinter
 root = Tk()
 root.title("Практическая работа №1")
@@ -189,29 +221,8 @@ right_frame = Frame(root)
 right_frame.pack(side="right", fill="both", expand=True, padx=20, pady=20)
 
 
-# Коррекции
-
-def apply_linear_correction():
-    global current_image
-
-    if current_image is None:
-        return
-
-    current_image = linear_correction(current_image)
-    display_image(current_image)
-
-def apply_nonlinear_correction():
-    global current_image
-
-    if current_image is None:
-        return
-
-    current_image = nonlinear_correction(current_image)
-    display_image(current_image)
-
-
 # Кнопки
-
+# Загрузка изображения
 btn = Button(
     left_frame,
     text="Загрузить изображение",
@@ -220,6 +231,7 @@ btn = Button(
 )
 btn.pack(pady=20)
 
+# Сохранить изображение
 btn_save = Button(
     left_frame,
     text="Сохранить изображение",
@@ -230,7 +242,7 @@ btn_save.pack(pady=20)
 
 
 # Ползунки
-
+# Яркость
 brightness_scale = Scale(
     left_frame,
     from_=-100,
@@ -243,6 +255,7 @@ brightness_scale = Scale(
 brightness_scale.set(0)
 brightness_scale.pack()
 
+# Контраст
 contrast_scale = Scale(
     left_frame,
     from_=-100,
@@ -255,6 +268,7 @@ contrast_scale = Scale(
 contrast_scale.set(0)
 contrast_scale.pack()
 
+# Насыщенность
 saturation_scale = Scale(
     left_frame,
     from_=-100,
@@ -268,7 +282,7 @@ saturation_scale.set(0)
 saturation_scale.pack()
 
 # Еще кнопки
-
+# Информация
 info_button = Button(
     left_frame,
     text="Информация об изображении",
@@ -283,6 +297,7 @@ info_label = Label(
 )
 info_label.pack(pady=10)
 
+# EXIF
 exif_button = Button(
     left_frame,
     text="EXIF",
@@ -297,6 +312,7 @@ exif_label = Label(
 )
 exif_label.pack(pady=10)
 
+# Градиент
 btn_grayscale = Button(
     left_frame,
     text="Градиент",
@@ -305,6 +321,7 @@ btn_grayscale = Button(
 )
 btn_grayscale.pack(pady=20)
 
+# Поворот на 90 градусов
 rotate_button = Button(
     left_frame,
     text="Повернуть на 90°",
@@ -313,6 +330,7 @@ rotate_button = Button(
 )
 rotate_button.pack(pady=20)
 
+# Показ гистограммы
 histogram_button = Button(
     left_frame,
     text="Показать гистограмму",
@@ -321,6 +339,7 @@ histogram_button = Button(
 )
 histogram_button.pack(pady=10)
 
+# Линейная коррекция
 linear_corr_btn = Button(
     left_frame,
     text="Линейная коррекция",
@@ -329,6 +348,7 @@ linear_corr_btn = Button(
 )
 linear_corr_btn.pack(pady=10)
 
+# Нелинейная коррекция
 nonlinear_corr_btn = Button(
     left_frame,
     text="Нелинейная коррекция",
@@ -337,6 +357,7 @@ nonlinear_corr_btn = Button(
 )
 nonlinear_corr_btn.pack(pady=10)
 
+# Отмена всех действий
 reset_button = Button(
     left_frame,
     text="Отменить все действия",
@@ -345,6 +366,7 @@ reset_button = Button(
 )
 reset_button.pack(pady=10)
 
+# Место для самого изображения
 image_label = Label(right_frame)
 image_label.pack(pady=10)
 
