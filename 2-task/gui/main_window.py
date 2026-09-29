@@ -67,6 +67,19 @@ class MainWindow(QMainWindow):
         morph_group = QGroupBox("Морфологические операции")
         morph_layout = QVBoxLayout(morph_group)
 
+        # Кнопка сброса к исходному изображению
+        btn_reset = QPushButton("Вернуться к исходному")
+        btn_reset.setStyleSheet(
+            "QPushButton { background-color: #4CAF50; color: white; "
+            "font-weight: bold; padding: 8px; }"
+            "QPushButton:hover { background-color: #45a049; }"
+        )
+        btn_reset.clicked.connect(self._reset_to_original)
+        morph_layout.addWidget(btn_reset)
+
+        # Разделитель
+        morph_layout.addSpacing(10)
+
         # Количество итераций
         iter_layout = QHBoxLayout()
         iter_layout.addWidget(QLabel("Итерации:"))
@@ -231,6 +244,16 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить изображение:\n{e}")
+
+    def _reset_to_original(self):
+        """Возвращает результат к исходному grayscale изображению."""
+        if self.grayscale_image is None:
+            QMessageBox.warning(self, "Внимание", "Сначала загрузите изображение.")
+            return
+
+        # Восстанавливаем исходное grayscale изображение
+        self.viewer_result.set_image(self.grayscale_image)
+        self.statusbar.showMessage("Возврат к исходному изображению")
 
     def _on_save_result(self):
         """Обработчик сохранения результата."""
