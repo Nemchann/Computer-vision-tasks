@@ -3,12 +3,17 @@ import numpy as np
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QMenuBar, QMenu, QAction, QFileDialog, QMessageBox,
-    QStatusBar, QSplitter, QPushButton, QGroupBox, QSpinBox, QLabel
+    QStatusBar, QSplitter, QPushButton, QGroupBox, QSpinBox, QLabel, QDialog
 )
 from PyQt5.QtCore import Qt
 from gui.image_viewer import ImageViewer
 from gui.kernel_editor import KernelEditor
 from core.utils import load_image_original, load_image_as_grayscale, imwrite_unicode
+from gui.custom_filter_dialog import CustomFilterDialog
+from core.filters import (
+    get_sharpen_kernel, get_motion_blur_kernel, get_emboss_kernel,
+    apply_median_filter, apply_custom_filter
+)
 
 
 class MainWindow(QMainWindow):
@@ -101,6 +106,59 @@ class MainWindow(QMainWindow):
         morph_layout.addWidget(btn_blackhat)
 
         controls_layout.addWidget(morph_group)
+
+        # Группа "Фильтры"
+        filters_group = QGroupBox("Фильтры")
+        filters_layout = QVBoxLayout(filters_group)
+
+        # Повышение резкости
+        btn_sharpen = QPushButton("Повышение резкости")
+        btn_sharpen.clicked.connect(self._apply_sharpen)
+        filters_layout.addWidget(btn_sharpen)
+
+        # Размытие в движении
+        motion_layout = QHBoxLayout()
+        motion_layout.addWidget(QLabel("Размер:"))
+        self.spin_motion_size = QSpinBox()
+        self.spin_motion_size.setRange(3, 21)
+        self.spin_motion_size.setValue(9)
+        self.spin_motion_size.setSingleStep(2)  # Только нечётные
+        motion_layout.addWidget(self.spin_motion_size)
+
+        motion_layout.addWidget(QLabel("Угол:"))
+        self.spin_motion_angle = QSpinBox()
+        self.spin_motion_angle.setRange(0, 180)
+        self.spin_motion_angle.setValue(0)
+        motion_layout.addWidget(self.spin_motion_angle)
+
+        btn_motion_blur = QPushButton("Размытие")
+        btn_motion_blur.clicked.connect(self._apply_motion_blur)
+        filters_layout.addWidget(btn_motion_blur)
+
+        # Тиснение
+        btn_emboss = QPushButton("Тиснение")
+        btn_emboss.clicked.connect(self._apply_emboss)
+        filters_layout.addWidget(btn_emboss)
+
+        # Медианный фильтр
+        median_layout = QHBoxLayout()
+        median_layout.addWidget(QLabel("Размер:"))
+        self.spin_median_size = QSpinBox()
+        self.spin_median_size.setRange(3, 21)
+        self.spin_median_size.setValue(3)
+        self.spin_median_size.setSingleStep(2)  # Только нечётные
+        median_layout.addWidget(self.spin_median_size)
+
+        btn_median = QPushButton("Медианный")
+        btn_median.clicked.connect(self._apply_median)
+        filters_layout.addWidget(btn_median)
+
+        # Пользовательский фильтр
+        btn_custom = QPushButton("Пользовательский фильтр...")
+        btn_custom.clicked.connect(self._apply_custom_filter)
+        filters_layout.addWidget(btn_custom)
+
+        controls_layout.addWidget(filters_group)
 
         # Добавляем панель управления в главный layout
         main_layout.addWidget(controls_panel)
@@ -248,3 +306,78 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось применить операцию:\n{e}")
+
+    def _apply_sharpen(self):
+        """Применяет фильтр повышения резкости."""
+        if self.grayscale_image is None:
+            QMessageBox.warning(self, "Внимание", "Сначала загрузите изображение.")
+            return
+
+        try:
+            kernel = get_sharpen_kernel()
+            result = apply_custom_filter(self.grayscale_image, kernel)
+            self.viewer_result.set_image(result)
+            self.statusbar.showMessage("Применён фильтр: Повышение резкости")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось применить фильтр:\n{e}")
+
+    def _apply_motion_blur(self):
+        """Применяет эффект размытия в движении."""
+        if self.grayscale_image is None:
+            QMessageBox.warning(self, "Внимание", "Сначала загрузите изображение.")
+            return
+
+        try:
+            size = self.spin_motion_size.value()
+            angle = self.spin_motion_angle.value()
+            kernel = get_motion_blur_kernel(size, angle)
+            result = apply_custom_filter(self.grayscale_image, kernel)
+            self.viewer_result.set_image(result)
+            self.statusbar.showMessage(f"Применён фильтр: Размытие в движении (размер={size}, угол={angle}°)")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось применить фильтр:\n{e}")
+
+    def _apply_emboss(self):
+        """Применяет эффект тиснения."""
+        if self.grayscale_image is None:
+            QMessageBox.warning(self, "Внимание", "Сначала загрузите изображение.")
+            return
+
+        try:
+            kernel = get_emboss_kernel()
+            result = apply_custom_filter(self.grayscale_image, kernel)
+            self.viewer_result.set_image(result)
+            self.statusbar.showMessage("Применён фильтр: Тиснение")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось применить фильтр:\n{e}")
+
+    def _apply_median(self):
+        """Применяет медианный фильтр."""
+        if self.grayscale_image is None:
+            QMessageBox.warning(self, "Внимание", "Сначала загрузите изображение.")
+            return
+
+        try:
+            size = self.spin_median_size.value()
+            result = apply_median_filter(self.grayscale_image, size)
+            self.viewer_result.set_image(result)
+            self.statusbar.showMessage(f"Применён фильтр: Медианный (размер={size})")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось применить фильтр:\n{e}")
+
+    def _apply_custom_filter(self):
+        """Открывает диалог для ввода пользовательского фильтра."""
+        if self.grayscale_image is None:
+            QMessageBox.warning(self, "Внимание", "Сначала загрузите изображение.")
+            return
+
+        dialog = CustomFilterDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            try:
+                kernel = dialog.get_kernel()
+                result = apply_custom_filter(self.grayscale_image, kernel)
+                self.viewer_result.set_image(result)
+                self.statusbar.showMessage(
+                    f"Применён пользовательский фильтр (размер={kernel.shape[0]}×{kernel.shape[1]})")
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Не удалось применить фильтр:\n{e}")
