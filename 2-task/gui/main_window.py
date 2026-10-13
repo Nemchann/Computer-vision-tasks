@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from gui.image_viewer import ImageViewer
-from gui.kernel_editor import KernelEditor
+from gui.kernel_editor import KernelEditorDialog
 from core.utils import load_image_original, load_image_as_grayscale, imwrite_unicode
 from gui.custom_filter_dialog import CustomFilterDialog
 from core.filters import (
@@ -23,6 +23,7 @@ class MainWindow(QMainWindow):
         # Состояние приложения
         self.original_image = None  # Цветной оригинал (BGR)
         self.grayscale_image = None  # Полутоновая версия для морфологии
+        self.current_kernel = np.ones((3, 3), dtype=np.uint8)
 
         self._setup_ui()
         self._setup_menu()
@@ -58,10 +59,30 @@ class MainWindow(QMainWindow):
         controls_panel = QWidget()
         controls_layout = QVBoxLayout(controls_panel)
 
-        # Редактор ядра
-        self.kernel_editor = KernelEditor()
-        self.kernel_editor.kernel_changed.connect(self._on_kernel_changed)
-        controls_layout.addWidget(self.kernel_editor)
+        # Группа "Структурный элемент"
+        kernel_group = QGroupBox("Структурный элемент")
+        kernel_layout = QVBoxLayout(kernel_group)
+
+        # Отображение текущего ядра
+        self.label_current_kernel = QLabel("Текущее ядро: 3×3, все 1")
+        self.label_current_kernel.setStyleSheet(
+            "font-family: monospace; background-color: #f5f5f5; "
+            "padding: 10px; border: 1px solid #ccc;"
+        )
+        self.label_current_kernel.setAlignment(Qt.AlignCenter)
+        kernel_layout.addWidget(self.label_current_kernel)
+
+        # Кнопка открытия редактора
+        btn_edit_kernel = QPushButton("Редактировать структурный элемент...")
+        btn_edit_kernel.setStyleSheet(
+            "QPushButton { background-color: #2196F3; color: white; "
+            "font-weight: bold; padding: 8px; }"
+            "QPushButton:hover { background-color: #1976D2; }"
+        )
+        btn_edit_kernel.clicked.connect(self._on_open_kernel_editor)
+        kernel_layout.addWidget(btn_edit_kernel)
+
+        controls_layout.addWidget(kernel_group)
 
         # Группа "Морфологические операции"
         morph_group = QGroupBox("Морфологические операции")
@@ -283,10 +304,26 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении:\n{e}")
 
-    def _on_kernel_changed(self, kernel: np.ndarray):
-        """Обработчик изменения структурного элемента."""
+    def _on_open_kernel_editor(self):
+        """Открывает модальное окно редактора структурного элемента."""
+        dialog = KernelEditorDialog(self.current_kernel, self)
+        dialog.kernel_accepted.connect(self._on_kernel_accepted)
+        dialog.exec_()
+
+    def _on_kernel_accepted(self, kernel: np.ndarray):
+        """Обработчик подтверждения нового ядра из модального окна."""
         self.current_kernel = kernel
 
+        # Обновляем отображение текущего ядра
+        size = kernel.shape[0]
+        ones_count = np.sum(kernel)
+        total_count = size * size
+        self.label_current_kernel.setText(
+            f"Текущее ядро: {size}×{size}\n"
+            f"Активных клеток: {ones_count}/{total_count}"
+        )
+
+        self.statusbar.showMessage(f"Структурный элемент обновлён: {size}×{size}")
     def _apply_morphology(self, operation: str):
         """
         Применяет морфологическую операцию к текущему изображению.
