@@ -9,86 +9,103 @@ class MotionBlurFilter:
     """
 
     def __init__(self, blur_strength: int = 15):
-        """
-        Инициализирует фильтр размытия.
-
-        Args:
-            blur_strength: Сила размытия (размер ядра Гаусса).
-                          Должно быть нечётным числом (5, 9, 15, 21, ...)
-        """
         self.blur_strength = blur_strength
         self.prev_frame = None
 
     def apply(self, frame: np.ndarray) -> np.ndarray:
-        """
-        Применяет размытие к движущимся объектам в кадре.
-
-        Args:
-            frame: Текущий кадр видео (BGR)
-
-        Returns:
-            Кадр с размытыми движущимися объектами
-        """
-        # Если это первый кадр, просто сохраняем его и возвращаем
+        """Применяет размытие к движущимся объектам в кадре."""
         if self.prev_frame is None:
             self.prev_frame = frame.copy()
             return frame.copy()
 
-        # 1. Конвертируем оба кадра в grayscale для сравнения
+        # Детекция движения
         curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         prev_gray = cv2.cvtColor(self.prev_frame, cv2.COLOR_BGR2GRAY)
-
-        # 2. Вычисляем разность между кадрами
         frame_diff = cv2.absdiff(prev_gray, curr_gray)
 
-        # 3. Применяем пороговую обработку для получения бинарной маски движения
-        # Пиксели, изменившиеся больше чем на 30 единиц, считаем движением
         _, motion_mask = cv2.threshold(frame_diff, 30, 255, cv2.THRESH_BINARY)
 
-        # 4. Морфологические операции для очистки маски
-        # Удаляем шум и соединяем разрозненные области
+        # Морфологические операции
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
         motion_mask = cv2.morphologyEx(motion_mask, cv2.MORPH_OPEN, kernel, iterations=1)
         motion_mask = cv2.dilate(motion_mask, kernel, iterations=2)
 
-        # 5. Применяем размытие Гаусса ко всему кадру
+        # Размытие
         blurred_frame = cv2.GaussianBlur(frame, (self.blur_strength, self.blur_strength), 0)
 
-        # 6. Создаём финальное изображение:
-        # - Где есть движение (mask > 0) — берём размытый кадр
-        # - Где нет движения (mask = 0) — берём оригинальный кадр
-        # Используем cv2.bitwise_and и cv2.add для композитинга
-
-        # Инвертируем маску для фона (статичных областей)
+        # Композитинг
         mask_inv = cv2.bitwise_not(motion_mask)
-
-        # Вырезаем размытые движущиеся объекты
         motion_blurred = cv2.bitwise_and(blurred_frame, blurred_frame, mask=motion_mask)
-
-        # Вырезаем чёткие статичные области
         static_clear = cv2.bitwise_and(frame, frame, mask=mask_inv)
-
-        # Складываем вместе
         result = cv2.add(motion_blurred, static_clear)
 
-        # Сохраняем текущий кадр как предыдущий для следующего вызова
         self.prev_frame = frame.copy()
-
         return result
 
     def reset(self):
-        """Сбрасывает предыдущий кадр (полезно при смене видео)."""
         self.prev_frame = None
 
     def set_blur_strength(self, strength: int):
-        """
-        Устанавливает силу размытия.
-
-        Args:
-            strength: Нечётное число >= 3
-        """
         if strength < 3:
             strength = 3
         if strength % 2 == 0:
             strength += 1
         self.blur_strength = strength
+
+    def process_and_save_video(self, input_path: str, output_path: str,
+                               progress_callback=None) -> bool:
+        """
+        Обрабатывает видео и сохраняет результат в файл.
+
+        Args:
+            input_path: Путь к исходному видео
+            output_path: Путь для сохранения результата
+            progress_callback: Функция для отображения прогресса (current, total)
+
+        Returns:
+            True если успешно, False иначе
+        """
+        cap = cv2.VideoCapture(input_path)
+        if not cap.isOpened():
+            return False
+
+        # Получаем параметры видео
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # Создаём VideoWriter
+        # Используем codec MJPG для совместимости, или XVID
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # или 'XVID', 'MJPG'
+        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+        if not out.isOpened():
+            cap.release()
+            return False
+
+        self.reset()
+        frame_count = 0
+
+        try:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                # Применяем размытие
+                result = self.apply(frame)
+
+                # Записываем кадр
+                out.write(result)
+
+                frame_count += 1
+
+                # Обновляем прогресс
+                if progress_callback and frame_count % 10 == 0:
+                    progress_callback(frame_count, total_frames)
+
+            return True
+        finally:
+            cap.release()
+            out.release()

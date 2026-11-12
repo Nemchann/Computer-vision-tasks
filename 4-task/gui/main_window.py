@@ -15,6 +15,7 @@ from core.background_subtractor import BackgroundSubtractor
 from core.background_replacer import replace_background
 from core.motion_blur import MotionBlurFilter
 from core.optical_flow import OpticalFlowProcessor
+from PyQt5.QtWidgets import QProgressDialog
 
 
 class MainWindow(QMainWindow):
@@ -28,6 +29,7 @@ class MainWindow(QMainWindow):
         self.background_image = None  # Статичное изображение для замены фона
         self.motion_blur_filter = None  # Фильтр размытия движущихся объектов
         self.optical_flow_processor = None  # Процессор оптического потока
+        self.current_video_path = None  # Путь к текущему загруженному видео
 
         self._setup_ui()
         self._setup_menu()
@@ -200,6 +202,7 @@ class MainWindow(QMainWindow):
 
         try:
             self.video_player.load_video(filepath)
+            self.current_video_path = filepath
             self.statusbar.showMessage(f"Загружено видео: {filepath}")
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить видео:\n{e}")
@@ -372,67 +375,78 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Ошибка", f"Ошибка при замене фона:\n{e}")
 
     def _apply_motion_blur(self):
-        """Применяет размытие к движущимся объектам на видео."""
+        """Применяет размытие к движущимся объектам на видео и сохраняет результат."""
         if self.video_player.cap is None:
             QMessageBox.warning(self, "Внимание", "Сначала загрузите видео.")
             return
 
+        # Получаем путь к текущему видео
+        # (нужно сохранить его при загрузке)
+        if not hasattr(self, 'current_video_path') or not self.current_video_path:
+            QMessageBox.warning(self, "Внимание",
+                                "Пожалуйста, перезагрузите видео (эта функция требует доступ к файлу).")
+            return
+
         try:
-            # Получаем силу размытия из спинбокса
+            # Диалог сохранения файла
+            output_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Сохранить обработанное видео",
+                "",
+                "MP4 видео (*.mp4);;AVI видео (*.avi);;Все файлы (*)"
+            )
+
+            if not output_path:
+                return
+
+            # Получаем силу размытия
             blur_strength = self.spin_blur_strength.value()
 
-            # Создаём или обновляем фильтр
-            if self.motion_blur_filter is None:
-                self.motion_blur_filter = MotionBlurFilter(blur_strength=blur_strength)
-            else:
-                self.motion_blur_filter.set_blur_strength(blur_strength)
+            # Создаём фильтр
+            self.motion_blur_filter = MotionBlurFilter(blur_strength=blur_strength)
 
-            # Переходим в начало видео
-            self.video_player.current_frame = 0
-            self.video_player.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            # Создаём диалог прогресса
+            progress = QProgressDialog("Обработка видео...", "Отмена", 0, 100, self)
+            progress.setWindowModality(Qt.WindowModal)
+            progress.setMinimumDuration(0)
 
-            self.statusbar.showMessage(f"Применение размытия движения (сила={blur_strength})...")
-            QApplication.processEvents()
-
-            # Обрабатываем видео покадрово
-            frames_processed = 0
-            while True:
-                ret, frame = self.video_player.cap.read()
-                if not ret:
-                    break
-
-                # Применяем размытие к движущимся объектам
-                result = self.motion_blur_filter.apply(frame)
-                frames_processed += 1
-
-                # Показываем прогресс каждые 30 кадров
-                if frames_processed % 30 == 0:
-                    self.statusbar.showMessage(f"Обработано кадров: {frames_processed}")
+            # Функция обратного вызова для обновления прогресса
+            def update_progress(current, total):
+                if total > 0:
+                    percent = int((current / total) * 100)
+                    progress.setValue(percent)
                     QApplication.processEvents()
+                    if progress.wasCanceled():
+                        raise Exception("Отменено пользователем")
 
-            # Возвращаемся к началу и показываем первый кадр результата
-            self.video_player.current_frame = 0
-            self.video_player.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            self.statusbar.showMessage(f"Обработка видео (сила размытия={blur_strength})...")
 
-            # Для демонстрации просто покажем, что фильтр создан
-            # (для полноценного воспроизведения нужно сохранять результат в файл
-            #  или воспроизводить в реальном времени, что сложнее)
-
-            QMessageBox.information(
-                self, "Размытие применено",
-                f"Размытие движущихся объектов применено к видео.\n"
-                f"Сила размытия: {blur_strength}\n"
-                f"Обработано кадров: {frames_processed}\n\n"
-                f"Примечание: Для сохранения результата в файл используйте\n"
-                f"дополнительные инструменты (например, cv2.VideoWriter)."
+            # Обрабатываем и сохраняем
+            success = self.motion_blur_filter.process_and_save_video(
+                self.current_video_path,
+                output_path,
+                progress_callback=update_progress
             )
 
-            self.statusbar.showMessage(
-                f"Размытие движения применено (сила={blur_strength}, кадров={frames_processed})"
-            )
+            if success:
+                progress.setValue(100)
+                QMessageBox.information(
+                    self, "Готово",
+                    f"Видео успешно обработано и сохранено:\n{output_path}\n\n"
+                    f"Сила размытия: {blur_strength}"
+                )
+                self.statusbar.showMessage(f"Видео сохранено: {output_path}")
+            else:
+                QMessageBox.critical(self, "Ошибка", "Не удалось обработать видео.")
 
         except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при размытии:\n{e}")
+            if "Отменено" in str(e):
+                self.statusbar.showMessage("Обработка отменена")
+            else:
+                QMessageBox.critical(self, "Ошибка", f"Ошибка при обработке:\n{e}")
+        finally:
+            if hasattr(self, 'motion_blur_filter'):
+                self.motion_blur_filter.reset()
 
     def _show_optical_flow(self):
         """Визуализирует оптический поток на видео."""
