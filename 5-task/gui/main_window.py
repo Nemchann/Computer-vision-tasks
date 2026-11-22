@@ -42,7 +42,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.recognition_tab, "Распознавание")
 
         # Вкладка 3: Камера
-        self.camera_tab = CameraTab()
+        self.camera_tab = CameraTab(self.face_db, self)
         self.tabs.addTab(self.camera_tab, "📷 Камера")
 
         main_layout.addWidget(self.tabs)

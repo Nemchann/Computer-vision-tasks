@@ -44,22 +44,11 @@ class FaceDatabase:
 
     def add_person(self, name: str, image: np.ndarray) -> tuple:
         """
-        Добавляет нового человека в базу.
-
-        Args:
-            name: Имя человека
-            image: Изображение лица (numpy array, BGR)
-            encoding: 128-D вектор дескриптора
-
-        Returns:
-            (success: bool, message: str)
+        Добавляет фото человека в базу.
+        Теперь разрешает несколько фото для одного имени.
         """
-        # Проверяем, нет ли уже такого имени
-        if any(p['name'].lower() == name.lower() for p in self.profiles):
-            return False, f"Человек с именем '{name}' уже существует в базе."
-
         # Генерируем уникальное имя файла
-        timestamp = int(time.time())
+        timestamp = int(time.time() * 1000)  # Миллисекунды для уникальности
         safe_name = name.replace(" ", "_").replace("/", "_")
         filename = f"{safe_name}_{timestamp}.jpg"
         filepath = self.faces_dir / filename
@@ -78,7 +67,7 @@ class FaceDatabase:
 
         self.profiles.append(profile)
         self.save()
-        return True, "Профиль успешно добавлен."
+        return True, "Фото успешно добавлено."
 
     def get_all_profiles(self) -> list:
         """Возвращает список всех профилей (без дескрипторов, для UI)."""

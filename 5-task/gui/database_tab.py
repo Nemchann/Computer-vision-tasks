@@ -91,47 +91,62 @@ class DatabaseTab(QWidget):
             self.viewer.clear()
 
     def _on_add_face(self):
-        """Обработчик добавления лица в базу."""
-        filepath, _ = QFileDialog.getOpenFileName(
-            self, "Выберите фото лица", "", "Изображения (*.jpg *.jpeg *.png *.bmp)"
+        """Обработчик добавления лица в базу (с поддержкой нескольких фото)."""
+        # ВАЖНО: getOpenFileNames (с 's' на конце) возвращает список файлов
+        filepaths, _ = QFileDialog.getOpenFileNames(
+            self, "Выберите одно или несколько фото лица", "",
+            "Изображения (*.jpg *.jpeg *.png *.bmp)"
         )
-        if not filepath:
+        if not filepaths:
             return
 
-        try:
-            # 1. Загружаем изображение
-            image = cv2.imread(filepath)
-            if image is None:
-                raise ValueError("Не удалось прочитать изображение.")
+        # Запрашиваем имя один раз для всех выбранных фото
+        name, ok = QInputDialog.getText(self, "Новый профиль", "Введите имя человека:")
+        if not ok or not name.strip():
+            return
 
-            # 2. Валидация: ровно одно лицо
-            is_valid, message, face_location = validate_single_face(image)
-            if not is_valid:
-                QMessageBox.warning(self, "Ошибка валидации", message)
-                return
+        name = name.strip()
+        added_count = 0
+        skipped_count = 0
 
+        for filepath in filepaths:
+            try:
+                image = cv2.imread(filepath)
+                if image is None:
+                    skipped_count += 1
+                    continue
 
-            # 4. Запрашиваем имя у пользователя
-            name, ok = QInputDialog.getText(self, "Новый профиль", "Введите имя человека:")
-            if not ok or not name.strip():
-                return
+                is_valid, message, face_location = validate_single_face(image)
+                if not is_valid:
+                    skipped_count += 1
+                    continue
 
-            name = name.strip()
+                face_crop = get_face_crop(image, face_location, padding=30)
+                success, msg = self.face_db.add_person(name, face_crop)
 
-            # 5. Вырезаем лицо для красивого сохранения в базу (опционально, но рекомендуется)
-            face_crop = get_face_crop(image, face_location, padding=30)
+                if success:
+                    added_count += 1
 
-            # 6. Добавляем в базу
-            success, msg = self.face_db.add_person(name, face_crop)
+            except Exception as e:
+                print(f"Ошибка обработки {filepath}: {e}")
+                skipped_count += 1
+                continue
 
-            if success:
-                QMessageBox.information(self, "Успех", msg)
-                self._refresh_profile_list()
-            else:
-                QMessageBox.warning(self, "Ошибка", msg)
+        if added_count > 0:
+            QMessageBox.information(
+                self, "Успех",
+                f"Добавлено фото: {added_count}\n"
+                f"Пропущено: {skipped_count}\n\n"
+                f"Чем больше фото, тем точнее распознавание!"
+            )
+            self._refresh_profile_list()
+        else:
+            QMessageBox.warning(
+                self, "Ошибка",
+                "Не удалось добавить ни одного фото.\n"
+                "Проверьте, что на изображениях ровно одно лицо."
+            )
 
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Не удалось добавить лицо:\n{str(e)}")
 
     def _on_remove_face(self):
         """Обработчик удаления лица из базы."""
